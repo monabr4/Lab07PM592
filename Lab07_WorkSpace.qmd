@@ -1,0 +1,201 @@
+---
+title: "Lav7"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(GGally)
+library(readr)
+library(mfp)
+sos <- read_csv("~/Desktop/PM592/Week 8/ex_sos.csv")
+head(sos)
+
+to.z = function(x) {
+  (x - mean(x, na.rm=T))/sd(x, na.rm=T)}
+```
+
+You can add options to executable code like this
+
+```{r}
+# Create standardized help
+sos <-
+  sos %>%
+  mutate(m_help.z = to.z(m_help),
+         eth.f = factor(eth, levels=c("W", "B", "O")))
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+
+sos
+# Summary stats, make sure ranges etc make sense
+sos %>%
+  psych::describe()
+
+
+
+
+sos %>%
+  skimr::skim()
+```
+
+```{r}
+
+sos
+# Summary stats, make sure ranges etc make sense
+sos %>%
+  psych::describe()
+
+sos %>%
+  Hmisc::describe()
+
+sos %>%
+  skimr::skim()
+```
+
+```{r}
+
+# Run ggpairs
+my_fn <- function(data, mapping, method="loess", ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_point() + 
+    geom_smooth(method=method, ...)
+  p
+}
+
+sos %>%
+  ggpairs(lower = list(continuous = my_fn))
+```
+
+```{r}
+
+# Trusted Adults
+sos %>%
+  group_by(tatot) %>%
+  summarise(help_mean = mean(m_help.z, na.rm=T))
+
+sos %>% 
+  ggplot(aes(x = tatot, y = m_help.z)) + 
+  geom_jitter(width = .1) + 
+  geom_point(data = sos %>% 
+               group_by(tatot) %>% 
+               summarise(m_help.z = mean(m_help.z, na.rm=T)), 
+             stat = "identity", size = 5, color = "red", shape = "diamond") +
+  geom_line(data = sos %>% 
+              group_by(tatot) %>% 
+              summarise(m_help.z = mean(m_help.z, na.rm=T)), 
+            stat = "identity", color = "red", size = 1.5)
+
+```
+
+```{r}
+# Age
+sos %>%
+  group_by(age) %>%
+  summarise(help_mean = mean(m_help.z, na.rm=T))
+
+sos %>%
+  ggplot(aes(x = age, y = m_help.z)) +
+  geom_point() +
+    geom_smooth(method = "loess") +
+  geom_smooth(method = "lm", formula = "y~x", color="red", se=F) +
+  geom_smooth(method = "lm", formula = "y~x+x^2", color="green", se=F)
+```
+
+```{r}
+mfp(m_help.z ~ fp(age), data = sos) #Too complicated for this research question!
+sos <-
+  sos %>%
+  mutate(age.c = age - mean(age, na.rm=T)) #Mean-center age for polynomials
+age_full.m <- lm(m_help.z ~ age.c + I(age.c^2), data = sos)
+summary(age_full.m)
+
+```
+
+```{r}
+# Gender
+sos %>%
+  group_by(gender) %>%
+  summarise(mean_help = mean(m_help.z, na.rm=T))
+
+sos %>%
+  ggplot(aes(group = gender, y = m_help.z)) +
+  geom_boxplot()
+
+lm(m_help.z ~ gender, data = sos) %>% summary()
+
+```
+
+```{r}
+
+# Ethnicity
+sos %>%
+  group_by(eth) %>%
+  summarise(mean_help = mean(m_help.z, na.rm=T))
+
+sos %>%
+  ggplot(aes(group = eth, y = m_help.z)) +
+  geom_boxplot()
+
+lm(m_help.z ~ eth, data = sos) %>% summary()
+```
+
+```{r}
+# Check Confounding
+lm(m_help.z ~ tatot, data = sos) %>% 
+  summary()
+lm(m_help.z ~ tatot + age.c + I(age.c^2), data = sos) %>% 
+  summary() # Almost no change in estimates
+lm(m_help.z ~ tatot + gender, data = sos) %>% 
+  summary() # Almost no change in estimates
+lm(m_help.z ~ tatot + eth.f, data = sos) %>% 
+  summary() 
+```
+
+```{r}
+# Let's also examine all covariates together:
+lm(m_help.z ~ tatot + age.c + (age.c^2) + gender + eth, data = sos) %>%
+  summary() 
+```
+
+```{r}
+# We could now examine interactions
+# but there is no hypothesis relating to interactions
+library(ggfortify)
+m_help.m <-
+  lm(m_help.z ~ tatot, data = sos)
+
+autoplot(m_help.m, which = 1:6)
+
+car::residualPlots(m_help.m)
+car::qqPlot(m_help.m)
+
+library(olsrr)
+ols_plot_dfbetas(m_help.m)
+ols_plot_dffits(m_help.m)
+ols_plot_resid_qq(m_help.m)
+
+ols_plot_resid_lev(m_help.m)
+
+```
+
+```{r}
+
+# Examine the outliers' records
+sos %>%
+  bind_cols(
+    tibble(
+      pred = predict(m_help.m)
+    )
+  ) %>%
+  .[c(278, 340),]
+    
+# Re-fit the model with these observations excluded (sensitivity analysis)
+lm(m_help.z ~ tatot, 
+   data = sos[-c(278, 340),]) %>% 
+  summary()
+
+```
